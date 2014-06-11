@@ -220,7 +220,7 @@ class ZopaClient(object):
         results["Lent out"] = Decimal(sub(r'[^\d\-.]', '', summary_items[8].text.strip(u'£')))
         results["Lent out - nb loans"] = Decimal(sub(r'[^\d\-.]', '', summary_items[9].text.strip(u'£')))
         results["Late payment"] = Decimal(sub(r'[^\d\-.]', '', summary_items[10].text.strip(u'£')))
-        results["Lent out - nb loans"] = Decimal(sub(r'[^\d\-.]', '', summary_items[11].text.strip(u'£')))
+        results["Late payment - nb loans"] = Decimal(sub(r'[^\d\-.]', '', summary_items[11].text.strip(u'£')))
         results["Bad debt"] = Decimal(sub(r'[^\d\-.]', '', summary_items[14].text.strip(u'£')))
         results["Bad debt - nb loans"] = Decimal(sub(r'[^\d\-.]', '', summary_items[15].text.strip(u'£')))
 
