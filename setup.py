@@ -8,7 +8,7 @@ import zopaclient
 setup(
     name='zopaClient',
     version=zopaclient.__version__,
-    description='Lender client for Zopa.com',
+    description='python library for Zopa.com',
     author='Jean-Francois Paris',
     author_email='jfparis@rouge.eu.org',
     package_dir={'':'.'},

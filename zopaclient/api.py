@@ -15,16 +15,34 @@
 # You should have received a copy of the GNU Lesser General Public
 # License along with this library.  If not, see <http://www.gnu.org/licenses/>.
 
+from __future__ import unicode_literals, absolute_import, division
+
 import requests
 from lxml import html
 from decimal import Decimal
 from re import sub
 import time
 import random
+from collections import namedtuple
 
 zopa_url = "https://secure2.zopa.com/login"
+provision_fund_url = "https://www.zopa.com/lending/peer-to-peer-experts"
 
 user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.9; rv:29.0) Gecko/20100101 Firefox/29.0"
+
+SafeGuardFund = namedtuple('SafeGuardFund', 'amount, estimated_default, coverage')
+
+
+
+def convert_to_decimal(num):
+    """ convert strings to decimal.Decimal() objects, taking into account zopa formatting
+    conventions
+
+    :param num: a number as per formatted by rate setter website
+    :return: decimal.Decimal() representation of num
+    """
+    return Decimal(sub(r'[^\d\-.]', '', num.strip('£ \n\r')))
+
 
 class ZopaException(Exception):
     pass
@@ -58,6 +76,9 @@ class ZopaClient(object):
         self._natural = natural
         self._connected = False
         self._dashboard_url = None
+
+        # create an http session
+        self._init_session()
 
         # if in natural mode, we initiate the random number generator
         if self._natural:
@@ -97,12 +118,18 @@ class ZopaClient(object):
         self._account_url = tree.cssselect("#lending_account a")[0].get("href")
         self._statement_url = "https://secure2.zopaclient.com/lending/statements"
 
-    def connect(self):
-        """Connect the client from Zopa"""
+    def _init_session(self):
+        """Create a new http client
+        """
         # initiate the browser
         self._session = requests.Session()
         self._session.headers = {'User-agent': user_agent}
         self._session.verify = True
+
+    def connect(self):
+        """Connect the client from Zopa"""
+        # create a new http session each time we attempt a new connection
+        self._init_session()
 
         # pull zopaclient signup page
         page = self._session.get(zopa_url)
@@ -206,34 +233,75 @@ class ZopaClient(object):
         tree = html.fromstring(page.text, base_url=page.url)
 
         summary_items = tree.cssselect(".result .important strong")
-        results["Total earnings"] = Decimal(sub(r'[^\d\-.]', '', summary_items[0].text.strip(u'£')))
-        results["Zopa total"] = Decimal(sub(r'[^\d\-.]', '', summary_items[1].text.strip(u'£')))
-        results["Total paid in"] = Decimal(sub(r'[^\d\-.]', '', summary_items[2].text.strip(u'£')))
-        results["Total paid out"] = Decimal(sub(r'[^\d\-.]', '', summary_items[3].text.strip(u'£')))
+
+        ZopaAccount = namedtuple('ZopaAccount', """total_earnings, zopa_total, total_paid_in, total_paid_out, not_offered, fees_not_deducted
+        offered, processing, processing_nb_loans, lent_out, lent_out_nb_loans, late_payment, late_payment_nb_loans, bad_debt, bad_debt_nb_loans,
+        all_time_borrower_interest, all_time_holding_account_interest, all_time_bonuses, all_time_tell_a_friend, all_time_rapid_return_interest,
+        all_time_rate_promise, all_time_total_lender_fees, all_time_bad_debt, all_time_lent_out, all_time_capital_returned""")
+
+        total_earnings = convert_to_decimal(summary_items[0].text)
+        zopa_total = convert_to_decimal(summary_items[1].text)
+        total_paid_in = convert_to_decimal(summary_items[2].text)
+        total_paid_out = convert_to_decimal(summary_items[3].text)
 
         summary_items = tree.cssselect(".lending-offers-summary td.number")
-        results["Not offered"] = Decimal(sub(r'[^\d\-.]', '', summary_items[0].text.strip(u'£')))
-        results["Fees not yet deducted"] = Decimal(sub(r'[^\d\-.]', '', summary_items[2].text.strip(u'£')))
-        results["Offered"] = Decimal(sub(r'[^\d\-.]', '', summary_items[4].text.strip(u'£')))
-        results["Processing"] = Decimal(sub(r'[^\d\-.]', '', summary_items[6].text.strip(u'£')))
-        results["Processing - nb loans"] = Decimal(sub(r'[^\d\-.]', '', summary_items[7].text.strip(u'£')))
-        results["Lent out"] = Decimal(sub(r'[^\d\-.]', '', summary_items[8].text.strip(u'£')))
-        results["Lent out - nb loans"] = Decimal(sub(r'[^\d\-.]', '', summary_items[9].text.strip(u'£')))
-        results["Late payment"] = Decimal(sub(r'[^\d\-.]', '', summary_items[10].text.strip(u'£')))
-        results["Late payment - nb loans"] = Decimal(sub(r'[^\d\-.]', '', summary_items[11].text.strip(u'£')))
-        results["Bad debt"] = Decimal(sub(r'[^\d\-.]', '', summary_items[14].text.strip(u'£')))
-        results["Bad debt - nb loans"] = Decimal(sub(r'[^\d\-.]', '', summary_items[15].text.strip(u'£')))
+        not_offered = convert_to_decimal(summary_items[0].text)
+        fees_not_deducted = convert_to_decimal(summary_items[2].text)
+        offered = convert_to_decimal(summary_items[4].text)
+        processing = convert_to_decimal(summary_items[6].text)
+        processing_nb_loans = convert_to_decimal(summary_items[7].text)
+        lent_out = convert_to_decimal(summary_items[8].text)
+        lent_out_nb_loans = convert_to_decimal(summary_items[9].text)
+        late_payment = convert_to_decimal(summary_items[10].text)
+        late_payment_nb_loans= convert_to_decimal(summary_items[11].text)
+        bad_debt = convert_to_decimal(summary_items[14].text)
+        bad_debt_nb_loans = convert_to_decimal(summary_items[15].text)
 
         summary_items = tree.cssselect(".lending-offers-all-time-summary td.number")
-        results["All time - Interest from borrowers"] = Decimal(sub(r'[^\d\-.]', '', summary_items[0].text.strip(u'£')))
-        results["All time - Holding account interest"] = Decimal(sub(r'[^\d\-.]', '', summary_items[1].text.strip(u'£')))
-        results["All time - Zopa bonuses"] = Decimal(sub(r'[^\d\-.]', '', summary_items[2].text.strip(u'£')))
-        results["All time - Tell-a-friend rewards"] = Decimal(sub(r'[^\d\-.]', '', summary_items[3].text.strip(u'£')))
-        results["All time - Rapid Return interest credits"] = Decimal(sub(r'[^\d\-.]', '', summary_items[4].text.strip(u'£')))
-        results["All time - Rate Promise"] = Decimal(sub(r'[^\d\-.]', '', summary_items[5].text.strip(u'£')))
-        results["All time - Total lender fees"] = Decimal(sub(r'[^\d\-.]', '', summary_items[6].text.strip(u'£')))
-        results["All time - Bad debt"] = Decimal(sub(r'[^\d\-.]', '', summary_items[7].text.strip(u'£')))
-        results["All time - Total lent out"] = Decimal(sub(r'[^\d\-.]', '', summary_items[8].text.strip(u'£')))
-        results["All time - Capital returned "] = Decimal(sub(r'[^\d\-.]', '', summary_items[9].text.strip(u'£')))
+        all_time_borrower_interest = convert_to_decimal(summary_items[0].text)
+        all_time_holding_account_interest = convert_to_decimal(summary_items[1].text)
+        all_time_bonuses = convert_to_decimal(summary_items[2].text)
+        all_time_tell_a_friend = convert_to_decimal(summary_items[3].text)
+        all_time_rapid_return_interest = convert_to_decimal(summary_items[4].text)
+        all_time_rate_promise = convert_to_decimal(summary_items[5].text)
+        all_time_total_lender_fees = convert_to_decimal(summary_items[6].text)
+        all_time_bad_debt = convert_to_decimal(summary_items[7].text)
+        all_time_lent_out = convert_to_decimal(summary_items[8].text)
+        all_time_capital_returned = convert_to_decimal(summary_items[9].text)
 
-        return results
+        return ZopaAccount(total_earnings=total_earnings, zopa_total=zopa_total, total_paid_in=total_paid_in,
+                           total_paid_out=total_paid_out, not_offered=not_offered, fees_not_deducted=fees_not_deducted,
+                           offered=offered, processing=processing, processing_nb_loans=processing_nb_loans,
+                           lent_out=lent_out, lent_out_nb_loans=lent_out_nb_loans,
+                           late_payment=late_payment, late_payment_nb_loans=late_payment_nb_loans,
+                           bad_debt=bad_debt, bad_debt_nb_loans=bad_debt_nb_loans,
+                           all_time_borrower_interest=all_time_borrower_interest,
+                           all_time_holding_account_interest=all_time_holding_account_interest,
+                           all_time_bonuses=all_time_bonuses,
+                           all_time_tell_a_friend = all_time_tell_a_friend, all_time_rapid_return_interest=all_time_rapid_return_interest,
+                           all_time_rate_promise=all_time_rate_promise, all_time_total_lender_fees=all_time_total_lender_fees,
+                           all_time_bad_debt=all_time_bad_debt, all_time_lent_out=all_time_lent_out,
+                           all_time_capital_returned=all_time_capital_returned)
+
+    def get_safeguard_fund(self):
+        """ Get a summary of the amount in the safeguard fund
+
+        This method does not require that the client is connected before you invoke it
+
+        :return: namedtuple with the following keys:
+           * amount: total amount in the safeguard fund
+           * estimated_default: estimated default from outstanding loans
+           * coverage: coverage ratio
+
+        """
+
+        page = self._session.get(provision_fund_url)
+        tree = html.fromstring(page.text, base_url=page.url)
+
+        td = tree.xpath('.//div[@id = "reducing-risk"]/descendant::td[@class = "number"]')
+
+        amount = convert_to_decimal(td[0].text)
+        estimated_default = convert_to_decimal(td[1].text)
+        coverage = amount / estimated_default
+
+        return SafeGuardFund(amount = amount, estimated_default = estimated_default, coverage = coverage)

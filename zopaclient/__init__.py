@@ -18,4 +18,4 @@
 from __future__ import absolute_import
 from zopaclient.api import *
 
-__version__ = "1.0.0"
+__version__ = "2.0.0"
