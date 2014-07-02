@@ -37,3 +37,16 @@ if __name__ == "__main__":
     main()
 
 ```
+
+# Debugging
+
+If something goes wrong you can enable debugging by adding the following lines at the beginning of you code
+```python
+logger = logging.getLogger('zopaclient')
+logger.setLevel(logging.DEBUG)
+
+ch = logging.StreamHandler()
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+ch.setFormatter(formatter)
+logger.addHandler(ch)
+```

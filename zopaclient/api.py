@@ -24,6 +24,7 @@ from re import sub
 import time
 import random
 from collections import namedtuple
+from .log import logger
 
 zopa_url = "https://secure2.zopa.com/login"
 provision_fund_url = "https://www.zopa.com/lending/peer-to-peer-experts"
@@ -84,15 +85,20 @@ class ZopaClient(object):
         if self._natural:
             random.seed()
 
+        logger.debug("Created client for Zopa")
+
     def _get_http_helper(self):
         """Returns a helper function that allows lxml form processor to post using requests"""
 
         def helper(method, url, value):
             if not url:
+                logger.error("Cannot submit request. No URL provided")
                 raise ValueError("cannot submit, no URL provided")
             if method == 'GET':
+                logger.debug("GET request URL: %s, Value: %s", url, value)
                 return self._session.get(url, value)
             else:
+                logger.debug("POST request URL: %s, Value: %s", url, value)
                 return self._session.post(url, value)
 
         return helper
@@ -113,10 +119,10 @@ class ZopaClient(object):
         avoid having to seek for the URL at a later stage
         """
         # noinspection PyAttributeOutsideInit
-        self._exit_url = tree.cssselect(".signin a")[0].get("href")
+        self._exit_url = tree.cssselect(".signout a")[0].get("href")
         self._loanbook_url = tree.cssselect("#lending_my_loan_book a")[0].get("href")
         self._account_url = tree.cssselect("#lending_account a")[0].get("href")
-        self._statement_url = "https://secure2.zopaclient.com/lending/statements"
+        self._statement_url = "https://secure2.zopa.com/lending/statements"
 
     def _init_session(self):
         """Create a new http client
@@ -132,6 +138,7 @@ class ZopaClient(object):
         self._init_session()
 
         # pull zopaclient signup page
+        logger.debug("GET request URL: %s", zopa_url)
         page = self._session.get(zopa_url)
         self._sleep_if_needed()
 
@@ -140,6 +147,7 @@ class ZopaClient(object):
         form = tree.forms[0]
         form.fields["email"] = self._email
         form.fields["password"] = self._password
+        logger.debug("Submit form")
         page = html.submit_form(form, open_http=self._get_http_helper())
         self._sleep_if_needed()
 
@@ -152,6 +160,7 @@ class ZopaClient(object):
         tree = html.fromstring(page.text, base_url=page.url)
         form = tree.forms[0]
         form.fields["answer"] = self._security_questions[form.fields["question"]]
+        logger.debug("Submit form")
         page = html.submit_form(form, open_http=self._get_http_helper())
 
         self._sleep_if_needed()
@@ -170,6 +179,7 @@ class ZopaClient(object):
     def disconnect(self):
         """Disconnect the client from Zopa"""
         # call the logout url
+        logger.debug("GET request URL: %s", self._exit_url)
         page = self._session.get(self._exit_url)
         url = page.url
         if not "/signed_out" in url:
@@ -183,6 +193,7 @@ class ZopaClient(object):
         :return: loan book in csv format
         :rtype: str
         """
+        logger.debug("GET request URL: %s", self._loanbook_url)
         page = self._session.get(self._loanbook_url)
         self._sleep_if_needed()
 
@@ -194,7 +205,9 @@ class ZopaClient(object):
         values = {"_template$MainControl$Content$MyLoanBookControl$btnDownloadCSV.x": "132",
                   "_template$MainControl$Content$MyLoanBookControl$btnDownloadCSV.y": "7"}
 
+        logger.debug("Submit form")
         page = html.submit_form(form, extra_values=values, open_http=self._get_http_helper())
+        self._sleep_if_needed()
         return page.text
 
     def get_statement(self, year, month):
@@ -205,6 +218,7 @@ class ZopaClient(object):
         :return: statement in csv format
         :rtype: str
         """
+        logger.debug("GET request URL: %s", self._statement_url)
         page = self._session.get(self._statement_url)
         self._sleep_if_needed()
 
@@ -214,7 +228,9 @@ class ZopaClient(object):
         form.fields["date[month]"] = str(month) if type(month) == int else month
         form.fields["date[year]"] = str(year) if type(year) == int else year
 
+        logger.debug("Submit form")
         page = html.submit_form(form, open_http=self._get_http_helper())
+        self._sleep_if_needed()
         return page.text
 
 
@@ -224,7 +240,7 @@ class ZopaClient(object):
         :return: summary of current account
         :rtype: dict
         """
-
+        logger.debug("GET request URL: %s", self._account_url)
         page = self._session.get(self._account_url)
         self._sleep_if_needed()
 
@@ -294,8 +310,9 @@ class ZopaClient(object):
            * coverage: coverage ratio
 
         """
-
+        logger.debug("GET request URL: %s", provision_fund_url)
         page = self._session.get(provision_fund_url)
+        self._sleep_if_needed()
         tree = html.fromstring(page.text, base_url=page.url)
 
         td = tree.xpath('.//div[@id = "reducing-risk"]/descendant::td[@class = "number"]')
